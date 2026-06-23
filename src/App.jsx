@@ -20,10 +20,12 @@ const formatBytes = (bytes, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-const getFileIcon = (mimeType) => {
-  if (mimeType?.includes('image')) return <ImageIcon className="w-8 h-8 text-blue-500" />;
-  if (mimeType?.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />;
-  if (mimeType?.includes('zip') || mimeType?.includes('rar')) return <FileArchive className="w-8 h-8 text-amber-500" />;
+// Mengambil ikon berdasarkan mimeType atau Ekstensi Nama File
+const getFileIcon = (mimeType, fileName = '') => {
+  const typeStr = (mimeType || fileName || '').toLowerCase();
+  if (typeStr.includes('image') || typeStr.match(/\.(jpg|jpeg|png|gif|svg)$/)) return <ImageIcon className="w-8 h-8 text-blue-500" />;
+  if (typeStr.includes('pdf') || typeStr.match(/\.pdf$/)) return <FileText className="w-8 h-8 text-red-500" />;
+  if (typeStr.includes('zip') || typeStr.includes('rar') || typeStr.match(/\.(zip|rar|7z)$/)) return <FileArchive className="w-8 h-8 text-amber-500" />;
   return <File className="w-8 h-8 text-slate-500" />;
 };
 
@@ -40,8 +42,6 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
 const getFromGas = async (action) => {
   try {
     const url = `${GAS_URL}?action=${action}&t=${Date.now()}`;
-    // Mode no-cors dilarang jika kita ingin membaca respon JSON. 
-    // Kita gunakan pengaturan default fetch.
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
@@ -53,7 +53,6 @@ const getFromGas = async (action) => {
     }
   } catch (error) {
     console.error("GET Fetch Error:", error);
-    // Jika fetch terblokir, kemungkinannya 99% karena masalah hak akses Google Apps Script.
     throw new Error("Koneksi diblokir oleh Google. Pastikan Akses Web App di GAS diatur ke 'Siapa saja' (Anyone).");
   }
 };
@@ -62,9 +61,6 @@ const postToGas = async (payload) => {
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      // DIBUANG: headers: {'Content-Type': 'application/json'}
-      // Membuang headers memaksa browser menganggap ini 'text/plain',
-      // sehingga tidak memicu pengecekan CORS (OPTIONS) dari Google yang sering gagal.
       body: JSON.stringify(payload)
     });
     
@@ -148,6 +144,9 @@ class ErrorBoundary extends Component {
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-slate-800 mb-2">Terjadi Kesalahan Sistem</h2>
             <p className="text-slate-600 text-sm mb-4">Aplikasi mengalami kendala. Cobalah muat ulang halaman.</p>
+            <p className="text-xs text-red-400 bg-red-50 p-2 rounded mb-4 overflow-auto max-h-24 text-left">
+              {this.state.error && this.state.error.toString()}
+            </p>
             <button onClick={() => window.location.reload()} className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition">
               Muat Ulang
             </button>
@@ -166,7 +165,7 @@ const Toast = () => {
   const { state, dispatch } = useContext(AppContext);
   useEffect(() => {
     if (state.toast) {
-      const timer = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 5000); // Diperpanjang jadi 5 detik agar error terbaca
+      const timer = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 5000);
       return () => clearTimeout(timer);
     }
   }, [state.toast, dispatch]);
@@ -363,7 +362,7 @@ const UploadView = () => {
             {state.uploadQueue.map(item => (
               <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50">
                 <div className="flex items-center gap-3 overflow-hidden">
-                  {getFileIcon(item.originalFile.type)}
+                  {getFileIcon(item.originalFile.type, item.name)}
                   <div className="truncate">
                     <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                     <p className="text-xs text-slate-500">{item.size}</p>
@@ -405,7 +404,8 @@ const GalleryView = () => {
     fetchGallery();
   }, [dispatch]);
 
-  const filteredActivities = state.activities.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+  // FIX: Menggunakan a.title (bukan a.name yang tidak dikirim oleh GAS)
+  const filteredActivities = state.activities.filter(a => (a.title || '').toLowerCase().includes(search.toLowerCase()));
 
   if (state.isLoadingData) {
     return <div className="flex flex-col items-center justify-center h-64 text-slate-400"><Spinner className="w-8 h-8 mb-4 text-blue-500"/> Memuat Galeri...</div>;
@@ -417,7 +417,7 @@ const GalleryView = () => {
         <h2 className="text-2xl font-bold text-slate-800">
           {selectedFolder ? <button onClick={() => setSelectedFolder(null)} className="text-blue-600 hover:underline">Galeri</button> : 'Galeri Kegiatan'}
           {selectedFolder && <span className="text-slate-400 mx-2">/</span>}
-          {selectedFolder && selectedFolder.name}
+          {selectedFolder && selectedFolder.title} {/* FIX: selectedFolder.title */}
         </h2>
         
         {!selectedFolder && (
@@ -439,8 +439,8 @@ const GalleryView = () => {
               <div key={folder.id} onClick={() => setSelectedFolder(folder)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition cursor-pointer group flex items-center gap-4">
                 <div className="bg-blue-50 p-3 rounded-lg group-hover:bg-blue-100 transition"><Folder className="w-8 h-8 text-blue-500" /></div>
                 <div className="overflow-hidden">
-                  <h3 className="font-semibold text-slate-800 truncate" title={folder.name}>{folder.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{state.files.filter(f => f.folderId === folder.id).length} file</p>
+                  <h3 className="font-semibold text-slate-800 truncate" title={folder.title}>{folder.title}</h3> {/* FIX: folder.title */}
+                  <p className="text-xs text-slate-500 mt-1">{state.files.filter(f => f.activityId === folder.id).length} file</p> {/* FIX: f.activityId */}
                 </div>
               </div>
             ))
@@ -449,14 +449,16 @@ const GalleryView = () => {
       ) : (
         // FILE LIST IN FOLDER
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {state.files.filter(f => f.folderId === selectedFolder.id).length === 0 ? (
+          {/* FIX: f.activityId */}
+          {state.files.filter(f => f.activityId === selectedFolder.id).length === 0 ? (
              <div className="col-span-full text-center text-slate-500 py-10">Folder ini kosong.</div>
           ) : (
-            state.files.filter(f => f.folderId === selectedFolder.id).map(file => (
+            state.files.filter(f => f.activityId === selectedFolder.id).map(file => (
               <div key={file.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-start gap-4 group">
-                <div className="p-2 bg-slate-50 rounded-lg">{getFileIcon(file.mimeType)}</div>
+                <div className="p-2 bg-slate-50 rounded-lg">{getFileIcon(file.mimeType, file.newName)}</div>
                 <div className="flex-1 overflow-hidden">
-                  <p className="text-sm font-semibold text-slate-800 truncate" title={file.name}>{file.name}</p>
+                  {/* FIX: file.newName */}
+                  <p className="text-sm font-semibold text-slate-800 truncate" title={file.newName}>{file.newName}</p>
                   <p className="text-xs text-slate-500 mt-1">{formatBytes(file.size)}</p>
                   <div className="flex gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
                     <a href={file.url} target="_blank" rel="noreferrer" className="text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-md transition">Buka</a>
@@ -554,7 +556,8 @@ const AdminView = () => {
                   <td className="py-3 px-4 font-medium text-slate-800">{u.username}</td>
                   <td className="py-3 px-4">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.role.toUpperCase()}
+                      {/* FIX: Memastikan role tidak kosong (undefined) */}
+                      {u.role?.toUpperCase() || '-'}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">
