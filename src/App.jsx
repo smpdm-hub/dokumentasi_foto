@@ -8,9 +8,7 @@ import {
 // ==========================================
 // 1. KONFIGURASI & UTILITAS
 // ==========================================
-// Masukkan URL Web App dari Google Apps Script Anda di bawah ini.
 const GAS_URL = "https://script.google.com/macros/s/AKfycbx5qrErtjZzdTk3ogXkH9QnzrhTJeC8FMAQ3112FKjcRTCRERFh1CxytD31pxT2I8Ja2Q/exec";
-
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
 const formatBytes = (bytes, decimals = 2) => {
@@ -36,47 +34,56 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
   reader.onerror = error => reject(error);
 });
 
-// Helper untuk melakukan GET ke GAS (mengatasi masalah cache & error response HTML)
+// ==========================================
+// 2. FUNGSI FETCH ANTI-CORS (AUDIT BARU)
+// ==========================================
 const getFromGas = async (action) => {
-  // Tambahkan timestamp agar browser selalu mengambil data terbaru (tidak kena cache)
-  const url = `${GAS_URL}?action=${action}&t=${Date.now()}`;
-  const res = await fetch(url, { 
-    method: 'GET', 
-    redirect: 'follow' 
-  });
-  
-  if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-  
-  const text = await res.text();
   try {
-    return JSON.parse(text);
-  } catch (err) {
-    // Menampilkan potongan teks jika GAS ternyata membalas dengan pesan Error HTML
-    throw new Error(`Respon GAS tidak valid: ${text.substring(0, 30)}...`);
+    const url = `${GAS_URL}?action=${action}&t=${Date.now()}`;
+    // Mode no-cors dilarang jika kita ingin membaca respon JSON. 
+    // Kita gunakan pengaturan default fetch.
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+    
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error("Format respons dari GAS bukan JSON yang valid.");
+    }
+  } catch (error) {
+    console.error("GET Fetch Error:", error);
+    // Jika fetch terblokir, kemungkinannya 99% karena masalah hak akses Google Apps Script.
+    throw new Error("Koneksi diblokir oleh Google. Pastikan Akses Web App di GAS diatur ke 'Siapa saja' (Anyone).");
   }
 };
 
-// Helper untuk melakukan POST ke Google Apps Script tanpa memicu CORS Preflight (OPTIONS)
 const postToGas = async (payload) => {
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    headers: {
-      // Menggunakan text/plain agar dianggap sebagai 'Simple Request' oleh browser
-      // Ini akan melewati pengecekan CORS Preflight OPTIONS dari GAS
-      'Content-Type': 'text/plain;charset=utf-8'
-    },
-    body: JSON.stringify(payload)
-  });
-  
-  if (!res.ok) {
-    throw new Error(`HTTP Error: ${res.status}`);
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      // DIBUANG: headers: {'Content-Type': 'application/json'}
+      // Membuang headers memaksa browser menganggap ini 'text/plain',
+      // sehingga tidak memicu pengecekan CORS (OPTIONS) dari Google yang sering gagal.
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+    
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error("Format respons dari GAS bukan JSON yang valid.");
+    }
+  } catch (error) {
+    console.error("POST Fetch Error:", error);
+    throw new Error("Koneksi upload diblokir oleh Google. Pastikan Akses Web App di GAS diatur ke 'Siapa saja' (Anyone).");
   }
-  
-  return await res.json();
 };
 
 // ==========================================
-// 2. STATE MANAGEMENT (CONTEXT API)
+// 3. STATE MANAGEMENT (CONTEXT API)
 // ==========================================
 const AppContext = createContext();
 
@@ -125,7 +132,7 @@ function appReducer(state, action) {
 }
 
 // ==========================================
-// 3. ERROR BOUNDARY
+// 4. ERROR BOUNDARY
 // ==========================================
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -153,13 +160,13 @@ class ErrorBoundary extends Component {
 }
 
 // ==========================================
-// 4. KOMPONEN UI GLOBAL
+// 5. KOMPONEN UI GLOBAL
 // ==========================================
 const Toast = () => {
   const { state, dispatch } = useContext(AppContext);
   useEffect(() => {
     if (state.toast) {
-      const timer = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 3000);
+      const timer = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 5000); // Diperpanjang jadi 5 detik agar error terbaca
       return () => clearTimeout(timer);
     }
   }, [state.toast, dispatch]);
@@ -168,10 +175,10 @@ const Toast = () => {
   const isError = state.toast.type === 'error';
 
   return (
-    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-in">
-      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border ${isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
-        {isError ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-        <span className="font-medium text-sm">{state.toast.message}</span>
+    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-in w-[90%] max-w-md">
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border ${isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+        {isError ? <XCircle className="w-5 h-5 mt-0.5 shrink-0" /> : <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />}
+        <span className="font-medium text-sm break-words">{state.toast.message}</span>
       </div>
     </div>
   );
@@ -182,7 +189,7 @@ const Spinner = ({ className = "w-5 h-5" }) => (
 );
 
 // ==========================================
-// 5. VIEW KOMPONEN
+// 6. VIEW KOMPONEN
 // ==========================================
 
 // --- LOGIN VIEW ---
@@ -193,8 +200,6 @@ const LoginView = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!GAS_URL) return dispatch({ type: 'SHOW_TOAST', payload: { message: "URL GAS belum dikonfigurasi di App.jsx", type: "error" } });
-    
     setLoading(true);
     try {
       const data = await postToGas({ action: 'login', ...formData });
@@ -275,7 +280,7 @@ const UploadView = () => {
         title: formData.title,
         date: formData.date,
         size: formatBytes(file.size),
-        status: 'pending', // pending, uploading, success, error
+        status: 'pending', 
       };
     }).filter(Boolean);
 
@@ -304,10 +309,11 @@ const UploadView = () => {
         if (data.status === 'success') {
           dispatch({ type: 'UPDATE_QUEUE_ITEM', payload: { id: item.id, updates: { status: 'success' } } });
         } else {
-          throw new Error(data.message);
+          throw new Error(data.message || "Gagal mengunggah file");
         }
       } catch (error) {
         dispatch({ type: 'UPDATE_QUEUE_ITEM', payload: { id: item.id, updates: { status: 'error' } } });
+        dispatch({ type: 'SHOW_TOAST', payload: { message: error.message, type: "error" } });
       }
     }
   };
@@ -386,13 +392,12 @@ const GalleryView = () => {
 
   useEffect(() => {
     const fetchGallery = async () => {
-      if (!GAS_URL) return;
       dispatch({ type: 'SET_LOADING_DATA', payload: true });
       try {
         const data = await getFromGas('getData');
         dispatch({ type: 'SET_DATA', payload: data });
       } catch (error) {
-        dispatch({ type: 'SHOW_TOAST', payload: { message: `Gagal memuat galeri: ${error.message}`, type: "error" } });
+        dispatch({ type: 'SHOW_TOAST', payload: { message: error.message, type: "error" } });
       } finally {
         dispatch({ type: 'SET_LOADING_DATA', payload: false });
       }
@@ -475,12 +480,11 @@ const AdminView = () => {
 
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!GAS_URL) return;
       try {
         const data = await getFromGas('getUsers');
         dispatch({ type: 'SET_USERS', payload: data.users || [] });
       } catch (error) {
-        dispatch({ type: 'SHOW_TOAST', payload: { message: `Gagal memuat pengguna: ${error.message}`, type: "error" } });
+        dispatch({ type: 'SHOW_TOAST', payload: { message: error.message, type: "error" } });
       }
     };
     fetchUsers();
@@ -514,7 +518,7 @@ const AdminView = () => {
         dispatch({ type: 'SET_USERS', payload: state.usersList.filter(u => u.username !== username) });
       }
     } catch (error) {
-      dispatch({ type: 'SHOW_TOAST', payload: { message: "Gagal menghapus pengguna", type: "error" } });
+      dispatch({ type: 'SHOW_TOAST', payload: { message: error.message, type: "error" } });
     }
   };
 
@@ -636,17 +640,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppContext.Provider value={{ state, dispatch }}>
-        {/* Toast Notifikasi Global */}
         <Toast />
-        
-        {/* Tampilkan Peringatan Jika URL GAS Belum Diisi */}
-        {!GAS_URL && (
-          <div className="bg-amber-100 text-amber-800 p-2 text-center text-sm font-medium flex items-center justify-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> URL Google Apps Script belum dikonfigurasi di file .env
-          </div>
-        )}
-
-        {/* Routing Sederhana Berdasarkan Status Login */}
         {state.user ? <Dashboard /> : <LoginView />}
       </AppContext.Provider>
     </ErrorBoundary>
