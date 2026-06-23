@@ -9,7 +9,7 @@ import {
 // 1. KONFIGURASI & UTILITAS
 // ==========================================
 // Masukkan URL Web App dari Google Apps Script Anda di bawah ini.
-const GAS_URL = "";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx5qrErtjZzdTk3ogXkH9QnzrhTJeC8FMAQ3112FKjcRTCRERFh1CxytD31pxT2I8Ja2Q/exec";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
