@@ -36,6 +36,25 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
   reader.onerror = error => reject(error);
 });
 
+// Helper untuk melakukan POST ke Google Apps Script tanpa memicu CORS Preflight (OPTIONS)
+const postToGas = async (payload) => {
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: {
+      // Menggunakan text/plain agar dianggap sebagai 'Simple Request' oleh browser
+      // Ini akan melewati pengecekan CORS Preflight OPTIONS dari GAS
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  if (!res.ok) {
+    throw new Error(`HTTP Error: ${res.status}`);
+  }
+  
+  return await res.json();
+};
+
 // ==========================================
 // 2. STATE MANAGEMENT (CONTEXT API)
 // ==========================================
@@ -154,16 +173,11 @@ const LoginView = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!GAS_URL) return dispatch({ type: 'SHOW_TOAST', payload: { message: "GAS URL belum disetting di .env", type: "error" } });
+    if (!GAS_URL) return dispatch({ type: 'SHOW_TOAST', payload: { message: "URL GAS belum dikonfigurasi di App.jsx", type: "error" } });
     
     setLoading(true);
     try {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', ...formData })
-      });
-      const data = await res.json();
+      const data = await postToGas({ action: 'login', ...formData });
       
       if (data.status === 'success') {
         dispatch({ type: 'LOGIN', payload: data.user });
@@ -265,12 +279,7 @@ const UploadView = () => {
           fileData: base64Data
         };
 
-        const res = await fetch(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
+        const data = await postToGas(payload);
         
         if (data.status === 'success') {
           dispatch({ type: 'UPDATE_QUEUE_ITEM', payload: { id: item.id, updates: { status: 'success' } } });
@@ -463,12 +472,7 @@ const AdminView = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'saveUser', ...newUser })
-      });
-      const data = await res.json();
+      const data = await postToGas({ action: 'saveUser', ...newUser });
       if (data.status === 'success') {
         dispatch({ type: 'SHOW_TOAST', payload: { message: "Pengguna berhasil disimpan", type: "success" } });
         setNewUser({ username: '', password: '', role: 'gtk' });
@@ -487,12 +491,7 @@ const AdminView = () => {
   const handleDeleteUser = async (username) => {
     if(!confirm(`Hapus pengguna ${username}?`)) return;
     try {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deleteUser', username })
-      });
-      const data = await res.json();
+      const data = await postToGas({ action: 'deleteUser', username });
       if (data.status === 'success') {
         dispatch({ type: 'SHOW_TOAST', payload: { message: "Pengguna dihapus", type: "success" } });
         dispatch({ type: 'SET_USERS', payload: state.usersList.filter(u => u.username !== username) });
