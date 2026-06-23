@@ -8,7 +8,7 @@ import {
 // ==========================================
 // 1. KONFIGURASI & UTILITAS
 // ==========================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx5qrErtjZzdTk3ogXkH9QnzrhTJeC8FMAQ3112FKjcRTCRERFh1CxytD31pxT2I8Ja2Q/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzw3M_iibRuWfrvttDsna_HykEQ80xvbxmwv-talHOUrhqZry4aJUNumT2Wr-xZtE-f/exec";
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
 const formatBytes = (bytes, decimals = 2) => {
