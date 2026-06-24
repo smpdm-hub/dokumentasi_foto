@@ -15,3 +15,43 @@
 .animate-slide-in {
   animation: slideIn 0.3s ease-out forwards;
 }
+/* Styling Cetak Laporan PDF Jurnal */
+@media print {
+  /* Sembunyikan elemen non-dokumen */
+  .no-print, aside, button, header, nav, toast, .toast, .alert {
+    display: none !important;
+  }
+  
+  /* Hilangkan background abu-abu bawaan layout web */
+  body, html, main {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  
+  /* Paksa area khusus cetak agar tampil penuh */
+  .print-only {
+    display: block !important;
+    width: 210mm; /* Standar Lebar A4 */
+    padding: 10mm 15mm !important;
+    font-family: 'Times New Roman', Times, serif;
+  }
+
+  /* Rapikan Border Tabel Laporan */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  
+  th, td {
+    border: 1px solid black !important;
+    padding: 6px 8px !important;
+  }
+  
+  /* Hindari pemotongan baris di tengah halaman (Page Break) */
+  tr {
+    page-break-inside: avoid !important;
+  }
+}
